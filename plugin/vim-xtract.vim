@@ -9,27 +9,9 @@
 " object properties into destructuring assignments. Simply select object 
 " properties and generate clean destructuring code instantly.
 " 
-" Why use Vim-Xtract?
-" - Eliminates repetitive typing when creating destructuring assignments
-" - Reduces errors in large object destructuring
-" - Works with both JavaScript and TypeScript
-" - Lightweight with no dependencies
-" - Integrates seamlessly with system clipboard
-"
-" Usage:
-" - Visual mode: Select object properties with vi{ then run :Xtract
-"   Example: vi{ on "{ name: 'John', age: 30 }" 
-"   Result: Copies "const { name, age, } = args;" to clipboard
-"
-" - Normal mode: Run :Xtract on current line containing object
-"   Works on single-line objects
-"
-" - Paste anywhere: Use 'p' to paste the generated destructuring code
-"   Perfect for function parameters and variable assignments
-"
-" - Optional mappings: Add to .vimrc for quick access
-"   vnoremap <leader>x :Xtract<CR>
-"   nnoremap <leader>x :Xtract<CR>
+" Configuration:
+" let g:vim_xtract_silent = 0        " Set to 1 to disable all messages
+" let g:vim_xtract_use_notify = 1    " Set to 0 to disable notify (Neovim only)
 "
 " ----------------------------------------------------------------------------
 
@@ -42,6 +24,51 @@ let g:loaded_vim_xtract = 1
 " Save compatible mode
 let s:save_cpo = &cpo
 set cpo&vim
+
+" Default configuration
+if !exists('g:vim_xtract_silent')
+    let g:vim_xtract_silent = 0
+endif
+
+if !exists('g:vim_xtract_use_notify')
+    let g:vim_xtract_use_notify = 1
+endif
+
+" Function to display messages (with notify support)
+function! s:ShowMessage(message, level)
+    if g:vim_xtract_silent
+        return
+    endif
+    
+    " Check if we're in Neovim and notify is available
+    if has('nvim') && g:vim_xtract_use_notify
+        try
+            " Try to use notify
+            if a:level == 'error'
+                call luaeval('require("notify")(_A[1], vim.log.levels.ERROR, {title = "vim-xtract", icon = "⚠️", timeout = 3000})', [a:message])
+            elseif a:level == 'warn'
+                call luaeval('require("notify")(_A[1], vim.log.levels.WARN, {title = "vim-xtract", icon = "⚠️", timeout = 3000})', [a:message])
+            else
+                call luaeval('require("notify")(_A[1], vim.log.levels.INFO, {title = "vim-xtract", icon = "📋", timeout = 2000})', [a:message])
+            endif
+            return
+        catch
+            " Fallback to echo if notify is not available
+        endtry
+    endif
+    
+    " Default echo behavior
+    if a:level == 'error'
+        echohl ErrorMsg
+    elseif a:level == 'warn'
+        echohl WarningMsg
+    else
+        echohl None
+    endif
+    
+    echo a:message
+    echohl None
+endfunction
 
 function! s:ExtractObjectKeys() range
     " Get the selected text (works with visual selection or current line)
@@ -77,9 +104,9 @@ function! s:ExtractObjectKeys() range
         let @+ = destructuring_code
         let @" = destructuring_code
         
-        echo "✓ Destructuring code copied to clipboard! (" . len(keys) . " properties)"
+        call s:ShowMessage("✓ Destructuring code copied to clipboard! (" . len(keys) . " properties)", "info")
     else
-        echo "✗ No object properties found in selection"
+        call s:ShowMessage("✗ No object properties found in selection", "warn")
     endif
 endfunction
 
