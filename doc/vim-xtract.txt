@@ -1,34 +1,140 @@
-*vim-xtract.txt*    Extract JavaScript object properties to destructuring
+*vim-xtract.txt*    Enhanced JavaScript/TypeScript object destructuring
 
 CONTENTS                                                    *vim-xtract-contents*
 
-1. Introduction ............................ |vim-xtract-introduction|
-2. Usage ................................... |vim-xtract-usage|
-3. Commands ................................ |vim-xtract-commands|
-4. Examples ................................ |vim-xtract-examples|
+1. Introduction ...................... |vim-xtract-introduction|
+2. Installation ...................... |vim-xtract-installation|
+3. Usage ............................. |vim-xtract-usage|
+4. Commands .......................... |vim-xtract-commands|
+5. Configuration ..................... |vim-xtract-configuration|
+6. Examples .......................... |vim-xtract-examples|
+7. Templates ......................... |vim-xtract-templates|
 
 ==============================================================================
 1. INTRODUCTION                                        *vim-xtract-introduction*
 
-vim-xtract automates the creation of JavaScript/TypeScript destructuring
-assignments from object properties.
+Enhanced vim-xtract automates creation of JavaScript/TypeScript destructuring
+assignments from object properties with support for:
+- Modern JS syntax (quoted keys, computed properties)
+- Customizable output templates
+- Smart notifications
+- Multi-language support (JS/TS/Vue/Svelte)
 
 ==============================================================================
-2. USAGE                                                      *vim-xtract-usage*
+2. INSTALLATION                                      *vim-xtract-installation*
 
-Select object properties and run :Xtract to generate destructuring code.
+Using packer.nvim:
+>
+    use {
+        "caesar003/vim-xtract",
+        ft = { "javascript", "typescript", "vue", "svelte" },
+        config = function()
+            vim.g.vim_xtract_var_name = 'data'
+            vim.g.vim_xtract_template = "const {\n{{keys}}\n} = {{var}};"
+        end
+    }
+<
 
 ==============================================================================
-3. COMMANDS                                                *vim-xtract-commands*
+3. USAGE                                                      *vim-xtract-usage*
 
-:Xtract                 Extract object properties to destructuring assignment
-                        Works in visual mode or on current line
+BASIC:
+1. Visually select object properties
+2. Execute `:Xtract` command
+3. Destructuring code copied to clipboard
+4. Paste with `p` or `"+p`
+
+ADVANCED:
+- Use template variants: `:XtractTS`, `:XtractLog` (custom commands)
+- Configure variable name and output format
 
 ==============================================================================
-4. EXAMPLES                                                *vim-xtract-examples*
+4. COMMANDS                                                *vim-xtract-commands*
 
-    vi{         " Select inside object braces
-    :Xtract     " Extract properties
-    p           " Paste destructuring code
+:Xtract                   Extract object properties to destructuring
+                          Works in visual mode or range
 
+:[range]XtractTS          Compact TypeScript-style destructuring
+:[range]XtractLog         Generate debug logging statement
+
+Create custom commands:
+>
+    vim.api.nvim_create_user_command('XtractDebug', function()
+        vim.g.vim_xtract_template = "console.debug('VARS:', { {{keys}} })"
+        vim.cmd('Xtract')
+    end, { range = true })
+<
+
+==============================================================================
+5. CONFIGURATION                                        *vim-xtract-configuration*
+
+g:vim_xtract_silent (default: 0)~
+    Disable all notifications when set to 1
+
+g:vim_xtract_use_notify (default: 1)~
+    Use Neovim's notify API when available
+
+g:vim_xtract_var_name (default: 'obj')~
+    Destination variable name in output
+
+g:vim_xtract_template (default: "const {\n{{keys}}\n} = {{var}};")~
+    Output template with placeholders:
+    - `{{keys}}`: Comma-separated property list
+    - `{{var}}`: Destination variable
+
+==============================================================================
+6. EXAMPLES                                                *vim-xtract-examples*
+
+EXAMPLE OBJECT:
+>
+    const response = {
+        id: 123,
+        'full-name': 'Alice',
+        "contact.email": "alice@example.com",
+        roles: ['admin', 'user']
+    };
+<
+
+STANDARD EXTRACTION (:'<,'>Xtract):
+>
+    const {
+      id,
+      full-name,
+      contact.email,
+      roles,
+    } = obj;
+<
+
+TYPESCRIPT STYLE (:'<,'>XtractTS):
+>
+    const { id, full-name, contact.email, roles } = data;
+<
+
+DEBUG LOGGING (:'<,'>XtractLog):
+>
+    console.log({ id, full-name, contact.email, roles }); // response
+<
+
+==============================================================================
+7. TEMPLATES                                              *vim-xtract-templates*
+
+CUSTOM TEMPLATE EXAMPLES:
+
+React Hooks:
+    let g:vim_xtract_template = "const { {{keys}} } = use{{var}}();"
+
+Vue Composition API:
+    let g:vim_xtract_template = "const { {{keys}} } = toRefs({{var}});"
+
+JSDoc Annotations:
+>
+    let g:vim_xtract_template = 
+        "/**\n * Extracted properties\n */\n" ..
+        "const {\n{{keys}}\n} = {{var}};"
+<
+
+Array Destructuring:
+    let g:vim_xtract_template = "const [{{keys}}] = {{var}};"
+
+==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

@@ -2,7 +2,7 @@
 " Author: caesar003
 " Email: caesarmuksid@gmail.com
 " Repo: https://github.com/caesar003/vim-xtract
-" Last Modified: Mon Jul 07 2025, 03.32
+" Last Modified: Sat Jul 12 2025, 07.36
 "
 " Description:
 " A lightweight Vim plugin that automates extracting JavaScript/TypeScript 
@@ -12,107 +12,80 @@
 " Configuration:
 " let g:vim_xtract_silent = 0        " Set to 1 to disable all messages
 " let g:vim_xtract_use_notify = 1    " Set to 0 to disable notify (Neovim only)
-"
+" let g:vim_xtract_var_name = 'obj'  
 " ----------------------------------------------------------------------------
 
 " Prevent loading twice
-if exists('g:loaded_vim_xtract')
-    finish
-endif
+if exists('g:loaded_vim_xtract') | finish | endif
 let g:loaded_vim_xtract = 1
 
-" Save compatible mode
 let s:save_cpo = &cpo
 set cpo&vim
 
-" Default configuration
-if !exists('g:vim_xtract_silent')
-    let g:vim_xtract_silent = 0
+" Configuration defaults
+if !exists('g:vim_xtract_silent')     | let g:vim_xtract_silent = 0     | endif
+if !exists('g:vim_xtract_use_notify') | let g:vim_xtract_use_notify = 1 | endif
+if !exists('g:vim_xtract_var_name')   | let g:vim_xtract_var_name = 'obj' | endif
+if !exists('g:vim_xtract_template')
+  let g:vim_xtract_template = "const {\n{{keys}}\n} = {{var}};"
 endif
 
-if !exists('g:vim_xtract_use_notify')
-    let g:vim_xtract_use_notify = 1
-endif
+" Enhanced messaging system
+function! s:Notify(msg, level) abort
+  if g:vim_xtract_silent | return | endif
 
-" Function to display messages (with notify support)
-function! s:ShowMessage(message, level)
-    if g:vim_xtract_silent
-        return
-    endif
-    
-    " Check if we're in Neovim and notify is available
-    if has('nvim') && g:vim_xtract_use_notify
-        try
-            " Try to use notify
-            if a:level == 'error'
-                call luaeval('require("notify")(_A[1], vim.log.levels.ERROR, {title = "vim-xtract", icon = "⚠️", timeout = 3000})', [a:message])
-            elseif a:level == 'warn'
-                call luaeval('require("notify")(_A[1], vim.log.levels.WARN, {title = "vim-xtract", icon = "⚠️", timeout = 3000})', [a:message])
-            else
-                call luaeval('require("notify")(_A[1], vim.log.levels.INFO, {title = "vim-xtract", icon = "📋", timeout = 2000})', [a:message])
-            endif
-            return
-        catch
-            " Fallback to echo if notify is not available
-        endtry
-    endif
-    
-    " Default echo behavior
-    if a:level == 'error'
-        echohl ErrorMsg
-    elseif a:level == 'warn'
-        echohl WarningMsg
-    else
-        echohl None
-    endif
-    
-    echo a:message
-    echohl None
+  if has('nvim') && g:vim_xtract_use_notify
+    try
+      let icons = {'info': '📋', 'warn': '⚠️', 'error': '❗'}
+      call luaeval('require("notify")(_A.msg, vim.log.levels[_A.level], {
+            \ "title": "vim-xtract",
+            \ "icon": _A.icon,
+            \ "timeout": 2000})', 
+            \ {'msg': a:msg, 'level': toupper(a:level), 'icon': get(icons, a:level, '')})
+      return
+    catch | endtry
+  endif
+
+  execute 'echohl' . (a:level == 'info' ? 'None' : a:level == 'warn' ? 'WarningMsg' : 'ErrorMsg')
+  echo a:msg | echohl None
 endfunction
 
-function! s:ExtractObjectKeys() range
-    " Get the selected text (works with visual selection or current line)
-    let selected_text = join(getline(a:firstline, a:lastline), ' ')
-    
-    " Extract all property names using regex
-    let keys = []
-    let pattern = '\<\w\+\>\s*:'
-    let start = 0
-    
-    while 1
-        let match = matchstr(selected_text, pattern, start)
-        if match == ''
-            break
-        endif
-        
-        let key = substitute(match, '\s*:', '', '')
-        call add(keys, key)
-        let start = start + len(match) + matchend(selected_text[start:], pattern)
+" Core extraction logic
+function! s:Xtract() range abort
+  let lines = getline(a:firstline, a:lastline)
+  let matches = []
+
+  " Find all valid property names (supports quoted and unquoted keys)
+  for line in lines
+    let pos = 0
+    while pos < len(line)
+      let [match, start, end] = matchstrpos(line, '\v([[:alpha:]_][[:alnum:]_]*|''\zs[^'']+\ze''|"\zs[^"]+\ze")\s*:', pos)
+      if match == '' | break | endif
+      let key = matchstr(match, '\v^([^:]+)')
+      call add(matches, key)
+      let pos = end
     endwhile
-    
-    " Create destructuring syntax
-    if len(keys) > 0
-        let result = []
-        call add(result, "const {")
-        for key in keys
-            call add(result, "  " . key . ",")
-        endfor
-        call add(result, "} = args;")
-        
-        " Copy to clipboard (both system and unnamed register)
-        let destructuring_code = join(result, "\n")
-        let @+ = destructuring_code
-        let @" = destructuring_code
-        
-        call s:ShowMessage("✓ Destructuring code copied to clipboard! (" . len(keys) . " properties)", "info")
-    else
-        call s:ShowMessage("✗ No object properties found in selection", "warn")
-    endif
+  endfor
+
+  if empty(matches)
+    call s:Notify('✗ No object properties found in selection', 'warn')
+    return
+  endif
+
+  " Generate destructuring code
+  let keys = join(map(matches, '"  " . v:val . ","'), "\n")
+  let output = substitute(g:vim_xtract_template, '{{var}}', g:vim_xtract_var_name, 'g')
+  let output = substitute(output, '{{keys}}', keys, 'g')
+
+  " Copy to clipboard
+  let @" = output
+  if has('clipboard') | let @+ = output | endif
+
+  call s:Notify('✓ Copied destructuring for ' . len(matches) . ' properties', 'info')
 endfunction
 
-" Create the command
-command! -range Xtract <line1>,<line2>call s:ExtractObjectKeys()
+" Register commands
+command! -range Xtract <line1>,<line2>call s:Xtract()
 
-" Restore compatible mode
 let &cpo = s:save_cpo
 unlet s:save_cpo
